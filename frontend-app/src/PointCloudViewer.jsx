@@ -4,7 +4,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import axios from "axios";
 import jsPDF from "jspdf";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_API_BASE;
+
 const ACCEPTED_FORMATS =
   ".ply,.pcd,.xyz,.xyzn,.xyzrgb,.pts,.las,.laz,.e57,.obj,.stl,.off,.gltf,.glb,.rcp,.rcs";
 
