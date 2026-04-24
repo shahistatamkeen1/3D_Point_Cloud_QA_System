@@ -26,6 +26,17 @@ export default function PointCloudViewer() {
   const mouseRef = useRef(new THREE.Vector2());
 
   const selectedMarkerRef = useRef(null);
+const measureLineRef = useRef(null);
+const measureMarkersRef = useRef([]);
+
+const savedMeasureLinesRef = useRef([]);
+const savedMeasureMarkersRef = useRef([]);
+const savedMeasureLabelsRef = useRef([]);
+
+const measureLabelRef = useRef(null);
+const measureModeRef = useRef(false);
+const measurePointsRef = useRef([]);
+
   const hotspotMarkersRef = useRef([]);
   const hotspotLabelSpritesRef = useRef([]);
 
@@ -105,6 +116,11 @@ export default function PointCloudViewer() {
   const [showGrid, setShowGrid] = useState(true);
   const [showAxes, setShowAxes] = useState(true);
 
+  const [measureMode, setMeasureMode] = useState(false);
+const [measurePoints, setMeasurePoints] = useState([]);
+const [measureDistance, setMeasureDistance] = useState(null);
+const [measurementHistory, setMeasurementHistory] = useState([]);
+
   const clearSelectedMarker = () => {
     if (!selectedMarkerRef.current || !sceneRef.current) return;
     sceneRef.current.remove(selectedMarkerRef.current);
@@ -171,7 +187,93 @@ export default function PointCloudViewer() {
     return sprite;
   };
 
+  const createMeasureLabel = (text) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 128;
+
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#00ffff";
+  ctx.font = "bold 42px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+  });
+
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(4.5, 1.1, 1);
+
+  return sprite;
+};
+
+const clearMeasurement = () => {
+
+  // 🔴 ADD THIS BLOCK FIRST (NEW CODE)
+  if (measureLabelRef.current && sceneRef.current) {
+    sceneRef.current.remove(measureLabelRef.current);
+    measureLabelRef.current.material?.map?.dispose();
+    measureLabelRef.current.material?.dispose();
+    measureLabelRef.current = null;
+  }
+
+  // existing code
+  if (measureLineRef.current && sceneRef.current) {
+    sceneRef.current.remove(measureLineRef.current);
+    measureLineRef.current.geometry?.dispose();
+    measureLineRef.current.material?.dispose();
+    measureLineRef.current = null;
+  }
+
+  measureMarkersRef.current.forEach((marker) => {
+    if (sceneRef.current) sceneRef.current.remove(marker);
+    marker.geometry?.dispose();
+    marker.material?.dispose();
+  });
+
+  measureMarkersRef.current = [];
+  setMeasurePoints([]);
+  setMeasureDistance(null);
+};
+
+const clearAllMeasurements = () => {
+  clearMeasurement();
+
+  savedMeasureLinesRef.current.forEach((line) => {
+    if (sceneRef.current) sceneRef.current.remove(line);
+    line.geometry?.dispose();
+    line.material?.dispose();
+  });
+
+  savedMeasureMarkersRef.current.forEach((marker) => {
+    if (sceneRef.current) sceneRef.current.remove(marker);
+    marker.geometry?.dispose();
+    marker.material?.dispose();
+  });
+
+  savedMeasureLabelsRef.current.forEach((label) => {
+    if (sceneRef.current) sceneRef.current.remove(label);
+    label.material?.map?.dispose();
+    label.material?.dispose();
+  });
+
+  savedMeasureLinesRef.current = [];
+  savedMeasureMarkersRef.current = [];
+  savedMeasureLabelsRef.current = [];
+  setMeasurementHistory([]);
+};
+
   const clearPointCloud = () => {
+    clearMeasurement();
     if (pointCloudRef.current && sceneRef.current) {
       sceneRef.current.remove(pointCloudRef.current);
       pointCloudRef.current.geometry?.dispose();
@@ -627,6 +729,32 @@ export default function PointCloudViewer() {
     controlsRef.current.update();
   };
 
+  const updateMeasurementNote = (id, note) => {
+  setMeasurementHistory((prev) =>
+    prev.map((m) =>
+      m.id === id ? { ...m, note } : m
+    )
+  );
+};
+
+  const focusMeasurement = (measurement) => {
+  if (!cameraRef.current || !controlsRef.current) return;
+
+  const midX = (measurement.a.x + measurement.b.x) / 2;
+  const midY = (measurement.a.y + measurement.b.y) / 2;
+  const midZ = (measurement.a.z + measurement.b.z) / 2;
+
+  controlsRef.current.target.set(midX, midY, midZ);
+
+  cameraRef.current.position.set(
+    midX + 6,
+    midY + 4,
+    midZ + 6
+  );
+
+  controlsRef.current.update();
+};
+
   const setCameraView = (view) => {
     if (!cameraRef.current || !controlsRef.current) return;
 
@@ -671,6 +799,111 @@ export default function PointCloudViewer() {
     if (!point) return;
 
     const deviation = deviationsRef.current[hitIndex] ?? 0;
+
+    if (measureModeRef.current) {
+  const newPoint = {
+    x: point.x,
+    y: point.y,
+    z: point.z,
+    originalX: point.originalX,
+    originalY: point.originalY,
+    originalZ: point.originalZ,
+  };
+
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x00ffff })
+  );
+
+  marker.position.set(point.x, point.y, point.z);
+  sceneRef.current.add(marker);
+  measureMarkersRef.current.push(marker);
+
+const currentMeasurePoints = measurePointsRef.current;
+
+const updatedPoints =
+  currentMeasurePoints.length >= 2
+    ? [newPoint]
+    : [...currentMeasurePoints, newPoint];
+
+  if (currentMeasurePoints.length >= 2) {
+    clearMeasurement();
+
+    const freshMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0x00ffff })
+    );
+
+    freshMarker.position.set(point.x, point.y, point.z);
+    sceneRef.current.add(freshMarker);
+    measureMarkersRef.current.push(freshMarker);
+
+    setMeasurePoints([newPoint]);
+    setMeasureDistance(null);
+    return;
+  }
+
+  setMeasurePoints(updatedPoints);
+
+  if (updatedPoints.length === 2) {
+    const [a, b] = updatedPoints;
+
+    const dx = b.originalX - a.originalX;
+    const dy = b.originalY - a.originalY;
+    const dz = b.originalZ - a.originalZ;
+
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    setMeasureDistance(distance);
+
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a.x, a.y, a.z),
+      new THREE.Vector3(b.x, b.y, b.z),
+    ]);
+
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ffff,
+      linewidth: 3,
+    });
+
+    const line = new THREE.Line(lineGeometry, lineMaterial);
+    sceneRef.current.add(line);
+    measureLineRef.current = line;
+
+    const midX = (a.x + b.x) / 2;
+const midY = (a.y + b.y) / 2;
+const midZ = (a.z + b.z) / 2;
+
+const label = createMeasureLabel(`${distance.toFixed(4)} units`);
+label.position.set(midX, midY + 1.2, midZ);
+
+sceneRef.current.add(label);
+measureLabelRef.current = label;
+
+const savedMeasurement = {
+  id: Date.now(),
+  distance,
+  note: "",
+  a: {
+    x: a.originalX,
+    y: a.originalY,
+    z: a.originalZ,
+  },
+  b: {
+    x: b.originalX,
+    y: b.originalY,
+    z: b.originalZ,
+  },
+};
+
+setMeasurementHistory((prev) => [...prev, savedMeasurement]);
+
+savedMeasureLinesRef.current.push(line);
+savedMeasureLabelsRef.current.push(label);
+savedMeasureMarkersRef.current.push(...measureMarkersRef.current);
+  }
+
+  return;
+}
 
     clearSelectedMarker();
 
@@ -982,6 +1215,18 @@ export default function PointCloudViewer() {
     rows.push([], ["Fix Recommendations"]);
     fixSuggestions.forEach((s) => rows.push([s]));
 
+    rows.push([]);
+rows.push(["Measurement Notes"]);
+rows.push(["Measurement", "Distance", "Note"]);
+
+measurementHistory.forEach((m, index) => {
+  rows.push([
+    `M${index + 1}`,
+    m.distance.toFixed(4),
+    m.note || "",
+  ]);
+});
+
     const csv = rows
       .map((row) =>
         row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")
@@ -1000,6 +1245,19 @@ export default function PointCloudViewer() {
 
     URL.revokeObjectURL(url);
   };
+
+  const captureScreenshot = () => {
+  if (!rendererRef.current) return;
+
+  const image = rendererRef.current.domElement.toDataURL("image/png");
+
+  const link = document.createElement("a");
+  link.href = image;
+  link.download = `pointcloud_snapshot_${Date.now()}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
   const exportPDFReport = () => {
     const doc = new jsPDF();
@@ -1263,6 +1521,14 @@ export default function PointCloudViewer() {
   }, [pointSize]);
 
   useEffect(() => {
+  measureModeRef.current = measureMode;
+}, [measureMode]);
+
+useEffect(() => {
+  measurePointsRef.current = measurePoints;
+}, [measurePoints]);
+
+  useEffect(() => {
     buildAISuggestions();
     buildDefectClassification();
     buildFixSuggestions();
@@ -1424,6 +1690,12 @@ export default function PointCloudViewer() {
           <button onClick={async () => { setMode("comparison"); await loadAnalysis("comparison", threshold); }} style={{ ...baseButton, background: mode === "comparison" ? "#9333ea" : "#444" }}>Compare</button>
           <button onClick={exportDeviationReport} style={{ ...baseButton, background: "#0f766e", fontWeight: 600 }}>Export CSV</button>
           <button onClick={exportPDFReport} style={{ ...baseButton, background: "#8b5cf6", fontWeight: 600 }}>Export PDF</button>
+          <button
+  onClick={captureScreenshot}
+  style={{ ...baseButton, background: "#0891b2", fontWeight: 600 }}
+>
+  Capture View
+</button>
         </div>
 
         <div style={{ ...cardStyle, lineHeight: 1.45 }}>
@@ -1631,6 +1903,104 @@ export default function PointCloudViewer() {
             </div>
           </div>
         )}
+
+        <div style={cardStyle}>
+  <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "8px" }}>
+    Measurement Tool
+  </div>
+
+  <button
+    onClick={() => {
+      setMeasureMode((prev) => !prev);
+      clearMeasurement();
+    }}
+    style={{
+      ...baseButton,
+      background: measureMode ? "#16a34a" : "#444",
+      marginBottom: "8px",
+    }}
+  >
+    {measureMode ? "Measure Mode ON" : "Measure Mode OFF"}
+  </button>
+
+  <button
+    onClick={clearMeasurement}
+    style={{
+      ...baseButton,
+      background: "#dc2626",
+      marginBottom: "8px",
+    }}
+  >
+    Clear Measurement
+  </button>
+
+  <button
+  onClick={clearAllMeasurements}
+  style={{
+    ...baseButton,
+    background: "#7f1d1d",
+    marginBottom: "8px",
+  }}
+>
+  Clear All Measurements
+</button>
+
+  <div style={{ fontSize: "12px", color: "#d1d5db", lineHeight: 1.5 }}>
+    <div>Selected Points: {measurePoints.length}/2</div>
+    <div>
+      Distance:{" "}
+      <div style={{ marginTop: "10px", fontWeight: "bold" }}>
+  Measurement History
+</div>
+
+{measurementHistory.length === 0 ? (
+  <div style={{ color: "#9ca3af" }}>No saved measurements yet.</div>
+) : (
+  measurementHistory.map((m, index) => (
+<div
+  key={m.id}
+  onClick={() => focusMeasurement(m)}
+  style={{
+    marginTop: "6px",
+    padding: "6px",
+    borderRadius: "6px",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    cursor: "pointer",
+  }}
+>
+  <strong>M{index + 1}</strong>: {m.distance.toFixed(4)} units
+
+  <input
+  type="text"
+  placeholder="Add note..."
+  value={m.note || ""}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => updateMeasurementNote(m.id, e.target.value)}
+  style={{
+    width: "100%",
+    marginTop: "6px",
+    padding: "6px",
+    borderRadius: "6px",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.35)",
+    color: "white",
+    fontSize: "11px",
+  }}
+/>
+</div>
+  ))
+)}
+      <strong>
+        {measureDistance !== null ? measureDistance.toFixed(4) : "Not measured"}
+      </strong>
+    </div>
+  </div>
+
+  <div style={{ marginTop: "6px", fontSize: "11px", color: "#9ca3af" }}>
+    Turn Measure Mode ON, then click two points in the 3D view.
+  </div>
+</div>
 
         <div style={cardStyle}>
           <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "8px" }}>View Controls</div>
