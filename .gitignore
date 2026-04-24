@@ -1,0 +1,17 @@
+node_modules/
+frontend-app/node_modules/
+venv/
+__pycache__/
+backend/__pycache__/
+backend/uploads/
+*.e57
+*.ply
+*.las
+*.laz
+*.pcd
+*.pts
+*.obj
+*.stl
+*.mp4
+.env
+.png
