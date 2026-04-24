@@ -45,5 +45,5 @@ Helps construction teams validate as-built structures, detect deviations, and pe
 ## Author
 
 Shahista Tamkeen
-Portfolio: https://shahistatamkeen1.github.io/portfolio/
-LinkedIn: https://www.linkedin.com/in/shahista-tamkeen/
+* Portfolio: https://shahistatamkeen1.github.io/portfolio/
+* LinkedIn: https://www.linkedin.com/in/shahista-tamkeen/
