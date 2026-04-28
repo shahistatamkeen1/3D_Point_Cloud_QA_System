@@ -105,15 +105,13 @@ This system provides:
 ---
 
 ## 🧩 Architecture
-```text
+
 User Upload → Backend (FastAPI)
             → Point Cloud Processing (Open3D)
             → Alignment (ICP)
             → Deviation Calculation
             → API Response
             → Frontend Visualization (Three.js)
-
----
 
 ## 📊 Impact
 
@@ -123,9 +121,23 @@ User Upload → Backend (FastAPI)
 
 ---
 
+## Future Improvements
+
+- Real-time point cloud streaming
+- AI-based defect classification
+- BIM model integration
+- Performance optimization for large datasets
+
+---
+
+## 👩‍💻 Author
+
+Shahista Tamkeen
+- LinkedIn: https://www.linkedin.com/in/shahista-tamkeen/
+- Portfolio: https://shahistatamkeen1.github.io/portfolio/
+
 ## 🖼️ Demo Preview
 
-> Add your screenshots here
-
-```md
 ![Heatmap](./images/heatmap.png)
+
+---
