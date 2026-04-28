@@ -2,7 +2,7 @@ fastapi
 uvicorn
 python-multipart
 numpy
-open3d
 scipy
+open3d
 pye57
 laspy
